@@ -1,0 +1,102 @@
+rules:
+  - id: python-command-injection-os-system
+    languages:
+      - python
+    severity: ERROR
+    message: 사용자 입력값이 OS 명령어 실행 함수에 직접 전달될 수 있습니다.
+    metadata:
+      title: Possible command injection
+      fix: subprocess.run을 리스트 인자와 함께 사용하고, 허용된 명령어만 실행하도록 제한하세요.
+    patterns:
+      - pattern-either:
+          - pattern: os.system($CMD)
+          - pattern: subprocess.call($CMD, shell=True)
+          - pattern: subprocess.run($CMD, shell=True)
+
+  - id: python-sql-injection-string-format
+    languages:
+      - python
+    severity: ERROR
+    message: 문자열 결합 또는 포매팅으로 SQL 쿼리를 만들면 SQL Injection 위험이 있습니다.
+    metadata:
+      title: Possible SQL injection
+      fix: 파라미터 바인딩 또는 ORM의 안전한 쿼리 API를 사용하세요.
+    pattern-either:
+      - pattern: $CURSOR.execute("..." + $VALUE)
+      - pattern: $CURSOR.execute(f"...{$VALUE}...")
+      - pattern: $CURSOR.execute("...%s..." % $VALUE)
+      - pattern: $CURSOR.execute("...{}".format($VALUE))
+
+  - id: python-path-traversal-open
+    languages:
+      - python
+    severity: WARNING
+    message: 사용자 입력값이 파일 경로로 직접 사용되면 Path Traversal 위험이 있습니다.
+    metadata:
+      title: Possible path traversal
+      fix: 허용된 디렉터리 내부 경로인지 검증하고, 파일명 화이트리스트를 적용하세요.
+    pattern-either:
+      - pattern: open($PATH)
+      - pattern: open($PATH, ...)
+
+  - id: javascript-xss-innerhtml
+    languages:
+      - javascript
+      - typescript
+    severity: ERROR
+    message: 검증되지 않은 값이 innerHTML에 삽입되면 XSS 위험이 있습니다.
+    metadata:
+      title: Possible XSS through innerHTML
+      fix: textContent를 사용하거나 HTML sanitizer를 적용하세요.
+    pattern: $ELEMENT.innerHTML = $VALUE
+
+  - id: javascript-command-injection-child-process
+    languages:
+      - javascript
+      - typescript
+    severity: ERROR
+    message: 사용자 입력값이 shell 명령 실행에 사용될 수 있습니다.
+    metadata:
+      title: Possible command injection
+      fix: exec 대신 execFile/spawn을 사용하고, 인자를 배열로 분리하며 입력값을 검증하세요.
+    pattern-either:
+      - pattern: child_process.exec($CMD, ...)
+      - pattern: exec($CMD, ...)
+
+  - id: php-sql-injection-concat
+    languages:
+      - php
+    severity: ERROR
+    message: 문자열 결합으로 SQL 쿼리를 생성하면 SQL Injection 위험이 있습니다.
+    metadata:
+      title: Possible SQL injection
+      fix: prepared statement와 bound parameter를 사용하세요.
+    pattern-either:
+      - pattern: mysqli_query($CONN, "..." . $VALUE)
+      - pattern: $PDO->query("..." . $VALUE)
+
+  - id: java-sql-injection-statement
+    languages:
+      - java
+    severity: ERROR
+    message: 문자열 결합으로 SQL 쿼리를 실행하면 SQL Injection 위험이 있습니다.
+    metadata:
+      title: Possible SQL injection
+      fix: Statement 대신 PreparedStatement를 사용하세요.
+    pattern-either:
+      - pattern: $STMT.executeQuery("..." + $VALUE)
+      - pattern: $STMT.executeUpdate("..." + $VALUE)
+
+  - id: c-buffer-overflow-unsafe-function
+    languages:
+      - c
+      - cpp
+    severity: ERROR
+    message: gets, strcpy, strcat 같은 함수는 Buffer Overflow 위험이 있습니다.
+    metadata:
+      title: Possible buffer overflow
+      fix: fgets, strncpy, strncat처럼 크기를 제한할 수 있는 함수를 사용하세요.
+    pattern-either:
+      - pattern: gets($BUF)
+      - pattern: strcpy($DST, $SRC)
+      - pattern: strcat($DST, $SRC)
