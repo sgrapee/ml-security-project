@@ -1,0 +1,12 @@
+{
+  "python": [
+    {
+      "pattern": "\\bpickle\\.loads\\s*\\(",
+      "severity": "ERROR",
+      "title": "Insecure deserialization with pickle",
+      "message": "pickle.loads() can execute code when deserializing untrusted data.",
+      "fix": "Do not use pickle for untrusted input. Prefer JSON or another safe data format.",
+      "rule_id": "generated.python.insecure-pickle-loads"
+    }
+  ]
+}

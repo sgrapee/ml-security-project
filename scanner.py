@@ -13,6 +13,7 @@ from typing import Any
 
 ROOT_DIR = Path(__file__).resolve().parent
 RULE_PATH = ROOT_DIR / "rules" / "custom-security.yml"
+GENERATED_RULE_PATH = ROOT_DIR / "rules" / "generated-fallback-rules.json"
 
 LANGUAGE_EXTENSIONS = {
     "python": ".py",
@@ -107,6 +108,43 @@ FALLBACK_RULES["typescript"] = FALLBACK_RULES["javascript"]
 FALLBACK_RULES["cpp"] = FALLBACK_RULES["c"]
 
 
+def load_generated_rules() -> dict[str, list[dict[str, str]]]:
+    if not GENERATED_RULE_PATH.exists():
+        return {}
+
+    try:
+        raw_rules = json.loads(GENERATED_RULE_PATH.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return {}
+
+    if not isinstance(raw_rules, dict):
+        return {}
+
+    generated_rules: dict[str, list[dict[str, str]]] = {}
+    for language, rules in raw_rules.items():
+        if not isinstance(language, str) or not isinstance(rules, list):
+            continue
+
+        valid_rules = []
+        for rule in rules:
+            if not isinstance(rule, dict):
+                continue
+            required_keys = {"pattern", "severity", "title", "message", "fix", "rule_id"}
+            if required_keys.issubset(rule):
+                valid_rules.append({key: str(rule[key]) for key in required_keys})
+
+        if valid_rules:
+            generated_rules[language] = valid_rules
+
+    return generated_rules
+
+
+def get_fallback_rules(language: str) -> list[dict[str, str]]:
+    built_in_rules = list(FALLBACK_RULES.get(language, []))
+    generated_rules = load_generated_rules().get(language, [])
+    return built_in_rules + generated_rules
+
+
 @dataclass
 class Finding:
     severity: str
@@ -144,7 +182,11 @@ def _run_semgrep(target: Path) -> dict[str, Any]:
         ) from exc
 
     if completed.stdout.strip():
-        return json.loads(completed.stdout)
+        try:
+            return json.loads(completed.stdout)
+        except json.JSONDecodeError as exc:
+            output = completed.stderr.strip() or completed.stdout.strip()
+            raise RuntimeError(output or "Semgrep did not return valid JSON.") from exc
 
     if completed.returncode not in (0, 1):
         raise RuntimeError(completed.stderr.strip() or "Semgrep scan failed.")
@@ -163,7 +205,7 @@ def _line_and_column(code: str, offset: int) -> tuple[int, int]:
 def _fallback_scan_code(code: str, language: str, file_path: str = "input") -> list[Finding]:
     findings: list[Finding] = []
 
-    for rule in FALLBACK_RULES.get(language, []):
+    for rule in get_fallback_rules(language):
         for match in re.finditer(rule["pattern"], code, flags=re.MULTILINE):
             line, column = _line_and_column(code, match.start())
             findings.append(
@@ -214,11 +256,8 @@ def scan_file(file_path: str | Path) -> list[Finding]:
         raise FileNotFoundError(f"File not found: {target}")
 
     try:
-        return _to_findings(_run_semgrep(target))
+        findings = _to_findings(_run_semgrep(target))
     except RuntimeError as exc:
-        if "Semgrep is not installed" not in str(exc):
-            raise
-
         extension = target.suffix.lower()
         language = next(
             (lang for lang, ext in LANGUAGE_EXTENSIONS.items() if ext == extension),
@@ -229,6 +268,20 @@ def scan_file(file_path: str | Path) -> list[Finding]:
             language,
             str(target),
         )
+
+    if findings:
+        return findings
+
+    extension = target.suffix.lower()
+    language = next(
+        (lang for lang, ext in LANGUAGE_EXTENSIONS.items() if ext == extension),
+        "python",
+    )
+    return _fallback_scan_code(
+        target.read_text(encoding="utf-8", errors="ignore"),
+        language,
+        str(target),
+    )
 
 
 def scan_code(code: str, language: str) -> list[Finding]:
@@ -242,11 +295,14 @@ def scan_code(code: str, language: str) -> list[Finding]:
         target = Path(temp_dir) / f"input{extension}"
         target.write_text(code, encoding="utf-8")
         try:
-            return _to_findings(_run_semgrep(target))
+            findings = _to_findings(_run_semgrep(target))
         except RuntimeError as exc:
-            if "Semgrep is not installed" not in str(exc):
-                raise
             return _fallback_scan_code(code, normalized_language, str(target))
+
+        if findings:
+            return findings
+
+        return _fallback_scan_code(code, normalized_language, str(target))
 
 
 def print_findings(findings: list[Finding]) -> None:

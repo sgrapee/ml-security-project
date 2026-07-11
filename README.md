@@ -22,6 +22,7 @@ AI 기반 소스코드 취약점 탐지 프로젝트입니다.
 - Python, JavaScript, PHP, Java, C 계열 코드 분석 지원
 - Semgrep 기반 정적 분석 실행
 - Semgrep이 설치되어 있지 않아도 기본 fallback 탐지 규칙으로 데모 실행 가능
+- AI Rule Generator를 통해 새로운 fallback 탐지 규칙 후보 생성 및 저장
 - 위험도, 파일 위치, 취약점 설명, 수정 방향 출력
 - CLI와 웹 UI 모두 지원
 - 기존 CodeBERT 학습 코드와 데이터셋 보존
@@ -75,6 +76,19 @@ streamlit run app.py
 ```
 
 브라우저에서 열리는 화면에 코드를 입력하고 `Analyze Code` 버튼을 누르면 취약점 분석 결과를 확인할 수 있습니다.
+
+### AI Rule Generator 사용
+
+웹 UI의 `AI Rule Generator` 탭에서 기존 규칙으로 탐지되지 않는 취약 코드 예시를 입력하면 새 탐지 규칙 후보를 만들 수 있습니다.
+
+OpenAI API 키가 있으면 더 유연한 AI 규칙 생성을 사용합니다.
+
+```bash
+set OPENAI_API_KEY=your_api_key
+streamlit run app.py
+```
+
+API 키가 없으면 로컬 템플릿 기반 추천기로 동작합니다. 생성된 fallback 규칙은 `rules/generated-fallback-rules.json`에 저장되고, 다음 분석부터 자동으로 적용됩니다.
 
 ## CLI 실행
 
